@@ -66,10 +66,13 @@ class STRAY(BaseAnomalyDetector):
     --------
     >>> from aeon.anomaly_detection import STRAY
     >>> from aeon.datasets import load_airline
+    >>> from sklearn.preprocessing import MinMaxScaler
     >>> import numpy as np
-    >>> X = load_airline()
+    >>> X = load_airline().to_frame().to_numpy()
+    >>> scaler = MinMaxScaler()
+    >>> X = scaler.fit_transform(X)
     >>> detector = STRAY(k=3)
-    >>> y = detector.fit_predict(X)
+    >>> y = detector.fit_predict(X, axis=0)
     >>> y[:5]
     array([False, False, False, False, False])
     """
@@ -113,7 +116,7 @@ class STRAY(BaseAnomalyDetector):
             [1 if i in idx_outliers else 0 for i in range(X.shape[0])]
         )
 
-        return outlier_bool.astype(bool)
+        return outlier_bool.astype(bool), outliers
 
     def _find_outliers_kNN(self, X: np.ndarray, n: int) -> dict:
         """Find outliers using kNN distance with maximum gap.
@@ -141,8 +144,8 @@ class STRAY(BaseAnomalyDetector):
             diff = np.apply_along_axis(np.diff, 1, distances)
             d = distances[range(n), np.apply_along_axis(np.argmax, 1, diff) + 1]
 
-        out_index = self._find_threshold(d, n)
-        return {"idx_outliers": out_index, "out_scores": d}
+        out_index, bound  = self._find_threshold(d, n)
+        return {"idx_outliers": out_index, "out_scores": d, "bound":bound}
 
     def _find_threshold(self, outlier_score: npt.ArrayLike, n: int) -> npt.ArrayLike:
         """Find Outlier Threshold.
@@ -174,11 +177,11 @@ class STRAY(BaseAnomalyDetector):
         ]
 
         log_alpha = np.log(1 / self.alpha)
-        bound = np.inf
+        bound = np.Inf
 
         for i in range(start, n):
             if gaps[i] > log_alpha * ghat[i]:
                 bound = outlier_score[order][i - 1]
                 break
 
-        return np.where(outlier_score > bound)[0]
+        return np.where(outlier_score > bound)[0], bound
